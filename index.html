@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Titanic Binary Classifier (TF.js, no server)</title>
+  <!-- TensorFlow.js -->
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest"></script>
+  <!-- PapaParse для robust CSV -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    :root { --border:#e5e7eb; --text:#111827; --muted:#6b7280; --bg:#f9fafb; }
+    body { font: 16px/1.4 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; color: var(--text); background: white; margin: 0; }
+    .wrap { max-width: 1200px; margin: 24px auto; padding: 0 16px; }
+    h1 { font-size: 26px; margin: 0 0 12px; }
+    .card { border:1px solid var(--border); border-radius: 10px; padding: 16px; margin: 16px 0; background: white; }
+    .row { display:flex; gap:16px; }
+    .col { flex:1 1 0; }
+    button { background:#2563eb; color:#fff; border:none; border-radius:10px; padding:10px 14px; cursor:pointer; }
+    button:disabled { opacity:.5; cursor:not-allowed; }
+    .btn-outline { background:#fff; color:#111; border:1px solid var(--border); }
+    .muted { color: var(--muted); font-size: 13px; }
+    pre.box { background:var(--bg); border:1px dashed var(--border); border-radius:10px; padding:12px; white-space:pre-wrap; overflow:auto; }
+    input[type="range"] { width:100%; }
+    .grid2 { display:grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .note { font-size:12px; color:var(--muted); margin-top:6px; }
+    .hdr { font-weight:600; margin-bottom:8px; font-size:20px; }
+    .inline { display:inline-flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    label { user-select:none; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Titanic Binary Classifier (TF.js, no server)</h1>
+
+    <!-- Data Load -->
+    <div class="card">
+      <div class="hdr">Data Load</div>
+      <div class="inline" style="gap:20px;">
+        <div>
+          <div class="muted">train.csv</div>
+          <input type="file" id="trainFile" accept=".csv" />
+        </div>
+        <div>
+          <div class="muted">test.csv</div>
+          <input type="file" id="testFile" accept=".csv" />
+        </div>
+        <button id="btnInspect" class="btn-outline">Inspect data</button>
+      </div>
+      <div class="note">Target: Survived (0/1). Features: Pclass, Sex, Age, SibSp, Parch, Fare, Embarked. Identifier: PassengerId (excluded).</div>
+
+      <div class="grid2" style="margin-top:12px;">
+        <pre id="previewInfo" class="box" style="min-height:280px;"></pre>
+        <div id="eda" class="box" style="min-height:280px;">
+          <div class="muted">Survival by Sex / Pclass (bars)</div>
+          <canvas id="barSex" width="520" height="110" style="max-width:100%;"></canvas>
+          <canvas id="barClass" width="520" height="110" style="max-width:100%; margin-top:12px;"></canvas>
+        </div>
+      </div>
+
+      <div class="box" id="tableBox" style="margin-top:12px; overflow:auto; white-space:nowrap;"></div>
+    </div>
+
+    <!-- Preprocessing -->
+    <div class="card">
+      <div class="hdr">Preprocessing</div>
+      <div class="inline" style="gap:12px;">
+        <label><input type="checkbox" id="toggleFamily" checked /> Add FamilySize and IsAlone</label>
+        <button id="btnPreprocess">Run preprocessing</button>
+      </div>
+      <div class="grid2" style="margin-top:12px;">
+        <pre id="featInfo" class="box"></pre>
+        <pre id="shapeInfo" class="box"></pre>
+      </div>
+    </div>
+
+    <!-- Model -->
+    <div class="card">
+      <div class="hdr">Model</div>
+      <div class="inline">
+        <button id="btnBuild">Build model</button>
+        <button id="btnSummary" class="btn-outline">Show summary</button>
+      </div>
+      <pre id="modelSummary" class="box" style="margin-top:12px;"></pre>
+    </div>
+
+    <!-- Training + Metrics -->
+    <div class="card">
+      <div class="hdr">Training</div>
+      <button id="btnTrain">Train (50 epochs, batch 32)</button>
+    </div>
+
+    <div class="card">
+      <div class="hdr">Metrics</div>
+      <div class="grid2">
+        <div>
+          <canvas id="rocCanvas" width="520" height="320" style="max-width:100%;"></canvas>
+          <div class="note">ROC curve on validation set (AUC shown on the chart)</div>
+        </div>
+        <div>
+          <div class="muted">Decision threshold</div>
+          <input type="range" id="threshold" min="0" max="1" step="0.01" value="0.50" />
+          <pre id="metricsBox" class="box"></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Prediction -->
+    <div class="card">
+      <div class="hdr">Prediction</div>
+      <div class="inline">
+        <button id="btnPredict">Predict test.csv</button>
+        <button id="btnExport" class="btn-outline">Export submission.csv and probabilities.csv</button>
+        <button id="btnSaveModel" class="btn-outline">Download model files</button>
+      </div>
+      <div id="predInfo" class="note" style="margin-top:8px;"></div>
+    </div>
+
+    <!-- Deployment notes -->
+    <div class="card">
+      <div class="hdr">Deployment notes</div>
+      <ul class="muted" style="margin:0 0 0 18px;">
+        <li>Create a public GitHub repository.</li>
+        <li>Commit <code>index.html</code> and <code>app.js</code> to the repository root.</li>
+        <li>Enable GitHub Pages: <b>main / root</b>.</li>
+        <li>Open the Pages URL; the app runs entirely in the browser.</li>
+      </ul>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
